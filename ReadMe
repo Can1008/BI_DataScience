@@ -1,0 +1,4 @@
+A data science project done in a team of 3 people.
+1) Exploration of dataset: describing and statistical analysis
+2) Classification: Preprocessing data (different scaling methods, feature selection), using Random Forest and Naive Bayes algorithms
+3) Artificially inserting missing values and how to deal with them
