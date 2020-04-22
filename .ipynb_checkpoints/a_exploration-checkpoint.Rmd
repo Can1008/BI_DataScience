@@ -1,0 +1,107 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.3.1
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python}
+# dependent functions are constantly reloaded after changes
+# %load_ext autoreload
+# %autoreload 2
+
+#import matplotlib.pyplot as plt
+import shutil, os, io
+import csv
+
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+from mylib.ml_helpers import *
+```
+
+```{python}
+DATA_ROOT = 'data/forest-cover-type'
+DATA_TRAIN = DATA_ROOT+'/train.csv'
+DATA_TEST = DATA_ROOT+'/test.csv'
+
+os.listdir(DATA_ROOT)
+
+df_train = pd.read_csv(DATA_TRAIN)
+rm_columns = ['Id']
+label_col = 'Cover_Type'
+df_train.drop(rm_columns, axis=1, inplace=True)
+```
+
+```{python}
+cor_matrix = feature_correlation(df_train)
+np.fill_diagonal(cor_matrix.values, 0)
+```
+
+```{python}
+CORRELATION_THRESH = 0.5
+s = cor_matrix[cor_matrix > CORRELATION_THRESH].unstack()
+so = s[s.sort_values(kind="quicksort").notnull()]
+n_plots = len(so)
+```
+
+```{python}
+plot_scatter_correlation(df_train, so)
+```
+
+```{python}
+def plot_scatter_correlation(df_train, so):
+    n_plots = len(so)
+    n_plots_x = int(len(so)/3)
+    n_plots_y = len(so)-n_plots_x
+    place = 1
+
+    fig = plt.figure(figsize=(20,50))
+
+    for index, value in so.items():
+        ax = fig.add_subplot(n_plots_x+n_plots_y, n_plots_x, place)
+        scatter = ax.scatter(x=df_train[index[0]], y=df_train[index[1]], c=df_train.Cover_Type)
+        ax.set_xlabel(index[0])
+        ax.set_ylabel(index[1])
+        ax.set_title('abs. correlation '+str(round(value, 2)))
+
+        if place == 2:
+            legend = ax.legend(*scatter.legend_elements(), loc='upper center', bbox_to_anchor=(0.4, 1.5),
+                      ncol=n_plots, fancybox=True, title='classes')
+            ax.add_artist(legend)
+        place+=1
+    plt.show()
+```
+
+```{python}
+n_plots = len(so)
+n_plots_x = int(len(so)/2)
+n_plots_y = len(so)-n_plots_x
+place = 1
+
+fig = plt.figure(figsize=(15,15))
+
+for index, value in so.items():
+    ax = fig.add_subplot(n_plots_x, n_plots_y, place)
+    place+=1
+    sns.scatterplot(data=df_train, x=index[0], y=index[1], hue='Cover_Type')
+    ax.set_title('correlation '+str(round(value, 2)))
+    ax.get_legend().set_visible(False)
+handles, labels = ax.get_legend_handles_labels()
+fig.legend(handles, labels, loc='upper right')
+
+plt.show()
+```
+
+```{python}
+
+```

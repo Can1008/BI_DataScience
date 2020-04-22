@@ -1,0 +1,69 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.3.1
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python}
+# %load_ext autoreload
+# %autoreload 2
+
+import shutil, os, io
+import csv
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from mylib.ml_helpers import *
+
+DATA_ROOT = 'data/forest-cover-type'
+DATA_TRAIN = DATA_ROOT+'/train.csv'
+DATA_TEST = DATA_ROOT+'/test.csv'
+
+df_train = pd.read_csv(DATA_TRAIN)
+rm_columns = ['Id']
+label_col = 'Cover_Type'
+df_train.drop(rm_columns, axis=1, inplace=True)
+```
+
+# TODO
+- Analyze the characteristics of the dataset 
+    - size, attribute types and semantics as discussed in class, value ranges, sparsity, min/max values, outliers, missing values, ...), and describe this in the report.
+- missing values
+- outlier analysis
+
+```{python}
+df_train.isnull().sum().sum()
+```
+
+```{python}
+df_train.dtypes.value_counts()
+```
+
+```{python}
+cor_matrix = feature_correlation(df_train)
+np.fill_diagonal(cor_matrix.values, 0)
+```
+
+```{python}
+CORRELATION_THRESH = 0.5
+plot_feature_correlation(df_train, cor_matrix, CORRELATION_THRESH)
+```
+
+```{python}
+df = pd.DataFrame.from_dict(skew_dict[1], orient='index').reset_index()
+df.columns = ['name', 's']
+df.sort_values(by='s')
+```
+
+```{python}
+skew_dict = get_skewed(df_train.iloc[:,:], figsize=(15,80))
+```

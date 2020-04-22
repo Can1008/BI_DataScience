@@ -1,0 +1,462 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.3.1
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+# Data Preprocessing 
+- normalize/standartize ratio
+    - fix skewness
+    - try all scales (min-max, standard, normalize, z-scale)
+        - https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.html
+- feature selection
+    - remove constant features (eg. std() = 0, unique values = 1)
+    - highly correlated features
+    - try 1 or 2 different feature selection models
+
+```{python}
+# %load_ext autoreload
+# %autoreload 2
+
+import shutil, os, io
+import csv
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from mylib.ml_helpers import *
+
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.pipeline import Pipeline
+
+from sklearn.preprocessing import Imputer
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import Normalizer
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn import svm
+
+
+seed = 30
+
+DATA_ROOT = 'data/forest-cover-type'
+DATA_TRAIN = DATA_ROOT+'/train.csv'
+DATA_TEST = DATA_ROOT+'/test.csv'
+
+df_train = pd.read_csv(DATA_TRAIN)
+
+features_numerical = ['Elevation', 'Aspect', 'Slope', 'Horizontal_Distance_To_Hydrology',
+       'Vertical_Distance_To_Hydrology', 'Horizontal_Distance_To_Roadways',
+       'Hillshade_9am', 'Hillshade_Noon', 'Hillshade_3pm',
+       'Horizontal_Distance_To_Fire_Points']
+
+features_categorical = ['Wilderness_Area1',
+       'Wilderness_Area2', 'Wilderness_Area3', 'Wilderness_Area4',
+       'Soil_Type1', 'Soil_Type2', 'Soil_Type3', 'Soil_Type4', 'Soil_Type5',
+       'Soil_Type6', 'Soil_Type7', 'Soil_Type8', 'Soil_Type9', 'Soil_Type10',
+       'Soil_Type11', 'Soil_Type12', 'Soil_Type13', 'Soil_Type14',
+       'Soil_Type15', 'Soil_Type16', 'Soil_Type17', 'Soil_Type18',
+       'Soil_Type19', 'Soil_Type20', 'Soil_Type21', 'Soil_Type22',
+       'Soil_Type23', 'Soil_Type24', 'Soil_Type25', 'Soil_Type26',
+       'Soil_Type27', 'Soil_Type28', 'Soil_Type29', 'Soil_Type30',
+       'Soil_Type31', 'Soil_Type32', 'Soil_Type33', 'Soil_Type34',
+       'Soil_Type35', 'Soil_Type36', 'Soil_Type37', 'Soil_Type38',
+       'Soil_Type39', 'Soil_Type40']
+
+label = ['Cover_Type']
+
+remove_columns = ['Id']
+
+remove_constant_features = get_constant_features(df_train)
+
+remove_columns.extend(remove_constant_features)
+
+df_train.drop(remove_columns, axis=1, inplace=True)
+
+features = df_train.drop(label, axis=1)
+labels = df_train[label]
+```
+
+# Scaling
+- min max
+- standard
+- z-scale
+
+```{python}
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, Normalizer
+
+features_minmax = features.copy()
+labels_minmax   = labels.copy()
+features_minmax[features_numerical] = MinMaxScaler().fit_transform(features_minmax[features_numerical])
+
+features_std = features.copy()
+labels_std   = labels.copy()
+features_std[features_numerical] = StandardScaler().fit_transform(features_std[features_numerical])
+
+features_norm = features.copy()
+labels_norm   = labels.copy()
+features_norm[features_numerical] = Normalizer().fit_transform(features_norm[features_numerical])
+
+scale_name =['non-scaled', 'standard-scale', 'min-max-scale', 'normalized']
+all_transformations = [features, features_minmax, features_std, features_norm]
+all_labels = [labels, labels_minmax, labels_std, labels_norm]
+```
+
+# Feature Selection
+## RandomForestClassifier
+
+
+```{python}
+from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
+
+feat_importances = []
+
+for i in range(0, len(all_transformations)):
+    X = all_transformations[i].values
+    y = all_labels[i].values.ravel()
+    
+    model = RandomForestClassifier(n_estimators=100) 
+    model.fit(X, y) 
+    importances = model.feature_importances_
+    
+    feature_importance_normalized = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)
+    feat_importances.append(feature_importance_normalized)
+```
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(20,7))
+
+# set height of bar
+bars1 = feat_importances[0]
+bars2 = feat_importances[1]
+bars3 = feat_importances[2]
+bars3 = feat_importances[3]
+ 
+# Set position of bar on X axis
+barWidth = 0.2
+r1 = np.arange(len(bars1))
+r2 = [x + barWidth for x in r1]
+r3 = [x + barWidth for x in r2]
+r4 = [x + barWidth for x in r3]
+
+model_name = type(model).__name__
+ 
+plt.bar(r1, bars1, color='#7f6d5f', width=barWidth, edgecolor='white', label='non-scaled')
+plt.bar(r2, bars2, color='#557f2d', width=barWidth, edgecolor='white', label='standard-scaled')
+plt.bar(r3, bars3, color='#2d7f5e', width=barWidth, edgecolor='white', label='min-max-saled')
+plt.bar(r4, bars3, color='#99ffbb', width=barWidth, edgecolor='white', label='normalized')
+
+plt.ylabel('importance')
+plt.xlabel('features')
+plt.title('Feature Selection '+ model_name)
+plt.xticks([r + barWidth for r in range(len(bars1))], all_transformations[i].columns, rotation=90)
+ 
+plt.legend()
+plt.show()
+```
+
+# Feature Selection
+## Correlation 
+
+-> see function get_selected_correlation_features in helpers
+
+
+# ML Classification
+- choose classifiers
+    - test all transformations with all feature selections to build the 'best' data set
+
+```{python}
+from sklearn.naive_bayes import GaussianNB
+
+NB = GaussianNB()
+y_pred = NB.fit(X_train,y_train)
+prediction = NB.predict(X_test)
+acc = accuracy_score(y_test, prediction)
+
+acc
+```
+
+```{python}
+
+```
+
+```{python}
+seed = 30
+
+feature_select_random_forrest = [0, 0.05, 0.1, 0.15, 0.2, 0.3]
+
+feature_select_correlation = [0.05, 0.10, 0.12, 0.15, 0.18, 0.2]
+
+results = []
+
+# all transformation scales
+for i in range(len(all_transformations)):
+    print('>Transformaion Scale ',scale_name[i])
+    
+    # feature select random forrest
+    for j in range(len(feature_select_random_forrest)):
+        
+        valid_col_names = get_feature_selected_columns(feature_select_random_forrest[j], feat_importances[i],  all_transformations[i].columns)
+        print('\t >Model-selection RF \t')
+    
+        ''' build train-test data '''
+        features_train = all_transformations[i][valid_col_names].values
+        labels_train = all_labels[i].values.ravel()
+        seed = 42
+        X_train, X_test, y_train, y_test = train_test_split(features_train, labels_train, test_size=0.20, random_state=seed)        
+        
+        ''' RF '''
+        model = RandomForestClassifier(n_estimators=100, random_state=seed)
+        model.fit(X_train, y_train)
+        RF_pred = model.predict(X_test)
+        RF_acc = accuracy_score(y_test, RF_pred)
+        results.append(['RF', scale_name[i], 'RF-select', feature_select_random_forrest[j], acc])
+        print('\t RF pred. accuracy ', RF_acc)
+
+        ''' NB '''
+        NB = GaussianNB()
+        y_pred = NB.fit(X_train, y_train)
+        NB_pred = NB.predict(X_test)
+        NB_acc = accuracy_score(y_test, NB_pred)
+        results.append(['NB', scale_name[i], 'NB-select', feature_select_random_forrest[j], acc])
+        print('\t NB pred. accuracy ', NB_acc)
+
+
+    # feature select by correlation threshold
+    for j in range(len(feature_select_correlation)): 
+        print('\t\t >Model-selection Correlation \t')
+        
+        tmp_features = all_transformations[i]
+        tmp_features[label] = all_labels[i]
+        valid_corr_names = get_selected_correlation_features(tmp_features, feature_select_correlation[j], label)        
+
+        # build train-test data
+        features_train = all_transformations[i][valid_corr_names].values
+        labels_train = all_labels[i].values.ravel()        
+        seed = 42
+        X_train, X_test, y_train, y_test = train_test_split(features_train, labels_train, test_size=0.20, random_state=seed)        
+        
+        
+        ''' RF '''
+        model = RandomForestClassifier(n_estimators=100, random_state=seed)
+        model.fit(X_train, y_train)
+        RF_pred = model.predict(X_test)
+        RF_acc = accuracy_score(y_test, RF_pred)
+        results.append(['RF', scale_name[i], 'Correlation-select', feature_select_correlation[j], acc])
+        print('\t RF pred. accuracy ', RF_acc)
+        
+        
+        ''' NB '''
+        NB = GaussianNB()
+        y_pred = NB.fit(X_train, y_train)
+        NB_pred = NB.predict(X_test)
+        NB_acc = accuracy_score(y_test, NB_pred)
+        results.append(['NB', scale_name[i], 'Correlation-select', feature_select_correlation[j], acc])
+        print('\t NB pred. accuracy ', NB_acc)
+        
+```
+
+```{python}
+''' format results '''
+column_names = ['scale', 'model_selection', 'threshold', 'accuracy']
+df = pd.DataFrame(results, columns=column_names)
+df['merged'] = df['scale'].map(str)+'_'+df['model_selection'].map(str)+'_thresh_'+df['threshold'].map(str)
+
+benchmark = df[(df['scale'] == 'non-scaled') & (df.threshold == 0.0)].accuracy.values[0]
+df_higher = df[df.accuracy >= benchmark] 
+df_lower = df[df.accuracy < benchmark] 
+df_best = df[df.accuracy == df.accuracy.max()] 
+
+''' plot figure '''
+fig, ax = plt.subplots(figsize=(10, 8), dpi=100)
+ax.set_ylim(df.accuracy.min(),df.accuracy.max()+0.0005)
+plt.xticks(rotation=90)
+ax.set_xlabel('Parameter-Combination')
+ax.set_ylabel('Accuracy')
+ax.set_title('Random Forest - Feature and Scale Selection Results')
+
+ax.bar(df_higher.merged, df_higher.accuracy, align='center', alpha=0.5, color = 'green', label='> benchmark')
+ax.bar(df_lower.merged, df_lower.accuracy, align='center', alpha=0.5, color = 'blue', label='< benchmark')
+ax.bar(df_best.merged, df_best.accuracy, align='center', alpha=0.8, color = 'darkgreen', label='best setting')
+
+if df_best.shape[0] != 0 and df.shape[1] != 0:
+    ax.legend(framealpha=0.5)
+plt.show()
+```
+
+```{python}
+df_best
+```
+
+```{python}
+
+```
+
+```{python}
+
+```
+
+```{python}
+
+```
+
+```{python}
+
+```
+
+```{python}
+'''build best setting dataset'''
+i = 0
+print('best setting:',scale_name[0])
+best_features = all_transformations[i]
+best_features[label] = all_labels[i]
+best_labels = all_labels[i]
+
+# corr selection
+valid_cols = get_selected_correlation_features(best_features, 0.18, label) 
+
+# rf selection
+#valid_cols = get_feature_selected_columns(0, feat_importances[i],  best_features.columns)
+
+
+# build train-test data
+features_train = best_features[valid_cols].values
+labels_train = best_labels.values.ravel()        
+seed = 42
+X_train, X_test, y_train, y_test = train_test_split(features_train, labels_train, test_size=0.20, random_state=seed)        
+```
+
+# SVM test
+
+```{python}
+from sklearn.naive_bayes import GaussianNB
+
+clf = GaussianNB()
+
+y_pred = clf.fit(X_train,y_train)
+
+prediction = clf.predict(X_test)
+
+acc = accuracy_score(y_test, prediction)
+
+acc
+```
+
+```{python}
+
+```
+
+# Hyper-parameter Tuning
+
+```{python}
+from sklearn.model_selection import GridSearchCV
+```
+
+```{python}
+param_grid = { 
+    'n_estimators': [80,100,150,200,250],
+    'max_features': ['auto', 'log2'],
+    'max_depth' : [None,4,8,12,16],
+    'criterion' : ['gini', 'entropy'],
+    'bootstrap' : [True, False]
+}
+
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+
+CV_rfc = GridSearchCV(estimator=model, param_grid=param_grid, cv=None)
+
+CV_rfc.fit(X_train, y_train)
+```
+
+```{python}
+CV_rfc.best_params_
+```
+
+```{python}
+rfc1=RandomForestClassifier(random_state=seed, 
+                            max_features=CV_rfc.best_params_['max_features'], 
+                            n_estimators= CV_rfc.best_params_['n_estimators'], 
+                            max_depth=CV_rfc.best_params_['max_depth'], 
+                            criterion=CV_rfc.best_params_['criterion'])
+
+rfc1 = RandomForestClassifier(n_estimators=100, random_state=seed)
+rfc1.fit(X_train, y_train)
+```
+
+```{python}
+prediction = rfc1.predict(X_test)
+acc = accuracy_score(y_test, prediction)
+acc
+```
+
+```{python}
+
+```
+
+```{python}
+
+DATA_ROOT = 'data/forest-cover-type'
+DATA_TRAIN = DATA_ROOT+'/train.csv'
+DATA_TEST = DATA_ROOT+'/test.csv'
+
+df_train = pd.read_csv(DATA_TRAIN)
+rm_columns = ['Id']
+label_col = 'Cover_Type'
+df_train.drop(rm_columns, axis=1, inplace=True)
+```
+
+```{python}
+df_train.drop([label_col], axis=1).head()
+```
+
+```{python}
+seed = 42
+features_train = df_train.drop([label_col], axis=1)
+labels_train = df_train[label_col]
+X_train, X_test, y_train, y_test = train_test_split(features_train, labels_train, test_size=0.20,  random_state=seed)
+print(X_train.shape, X_test.shape, y_train.shape, y_test.shape)
+```
+
+```{python}
+lr = LogisticRegression(C=1, solver='lbfgs', max_iter=500,
+                           random_state=17, n_jobs=4,
+                          multi_class='multinomial')
+
+rf = RandomForestClassifier(n_estimators=200,
+            max_depth=29,
+            bootstrap=True)
+
+
+ml_pipe = Pipeline([('scaler', StandardScaler()), 
+                       ('clf', rf)])
+
+ml_pipe.fit(X_train, y_train)
+```
+
+```{python}
+val_pred = ml_pipe.predict(X_test)
+acc = accuracy_score(y_test, val_pred)
+print(ml_pipe['clf'].__class__.__name__, '\npred. accuracy ', acc)
+```
+
+```{python}
+
+```
+
+```{python}
+
+```

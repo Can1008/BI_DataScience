@@ -1,0 +1,312 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.3.1
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+# Produce Missing Values
+
+# Fix Missing Values
+- sklearn data imputer
+    - vary strategy parameters
+
+
+```{python}
+# %load_ext autoreload
+# %autoreload 2
+
+import shutil, os, io
+import csv
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from mylib.ml_helpers import *
+
+DATA_ROOT = 'data/forest-cover-type'
+DATA_TRAIN = DATA_ROOT+'/train.csv'
+DATA_TEST = DATA_ROOT+'/test.csv'
+
+df_train = pd.read_csv(DATA_TRAIN)
+
+features_numerical = ['Elevation', 'Aspect', 'Slope', 'Horizontal_Distance_To_Hydrology',
+       'Vertical_Distance_To_Hydrology', 'Horizontal_Distance_To_Roadways',
+       'Hillshade_9am', 'Hillshade_Noon', 'Hillshade_3pm',
+       'Horizontal_Distance_To_Fire_Points']
+
+features_categorical = ['Wilderness_Area1',
+       'Wilderness_Area2', 'Wilderness_Area3', 'Wilderness_Area4',
+       'Soil_Type1', 'Soil_Type2', 'Soil_Type3', 'Soil_Type4', 'Soil_Type5',
+       'Soil_Type6', 'Soil_Type7', 'Soil_Type8', 'Soil_Type9', 'Soil_Type10',
+       'Soil_Type11', 'Soil_Type12', 'Soil_Type13', 'Soil_Type14',
+       'Soil_Type15', 'Soil_Type16', 'Soil_Type17', 'Soil_Type18',
+       'Soil_Type19', 'Soil_Type20', 'Soil_Type21', 'Soil_Type22',
+       'Soil_Type23', 'Soil_Type24', 'Soil_Type25', 'Soil_Type26',
+       'Soil_Type27', 'Soil_Type28', 'Soil_Type29', 'Soil_Type30',
+       'Soil_Type31', 'Soil_Type32', 'Soil_Type33', 'Soil_Type34',
+       'Soil_Type35', 'Soil_Type36', 'Soil_Type37', 'Soil_Type38',
+       'Soil_Type39', 'Soil_Type40']
+
+label = ['Cover_Type']
+
+remove_columns = ['Id']
+
+remove_constant_features = get_constant_features(df_train)
+
+remove_columns.extend(remove_constant_features)
+
+df_train.drop(remove_columns, axis=1, inplace=True)
+features_categorical = list(set(features_categorical) - set(remove_constant_features))
+
+features = df_train.drop(label, axis=1)
+labels = df_train[label]
+```
+
+# C (1)
+- a
+- b
+
+```{python}
+np.random.seed(42)
+```
+
+```{python}
+'''1a'''
+def get_random_1a(features, p=0.1):
+    c = int(features.shape[0]*features.shape[1]*p)
+    A = np.ones(features.shape)
+
+    mask = np.zeros(features.shape[0]*features.shape[1], dtype=bool)
+    mask[:c] = True
+    np.random.shuffle(mask)
+    mask = mask.reshape(features.shape[0], features.shape[1])
+
+    A[mask] = np.nan
+    df_missing_values = pd.DataFrame(A, columns=list(features.columns))
+    df_missing_values = features[~df_missing_values.isna()]
+    return df_missing_values
+
+rnd_1a = get_random_1a(features, 0.1)
+rnd_1a.isna().sum()
+```
+
+```{python}
+'''1b'''
+def get_random_1b(features, p=0.1):
+    c = int(features.shape[0]*p)
+    n_rows = features.shape[0]
+    m_cols = 1
+    empty_arr = []
+
+    for i in range(0, features.shape[1]):
+        col = np.ones((n_rows, m_cols))
+
+        mask = np.zeros(n_rows * m_cols, dtype=bool)
+        mask[:c] = True
+
+        np.random.shuffle(mask)
+
+        mask = mask.reshape(col.shape[0], col.shape[1])
+        col[mask] = np.nan
+
+        empty_arr.append(list(col.flatten()))
+
+    df_artificial = pd.DataFrame(empty_arr).T
+    df_artificial.columns = features.columns
+    df_artificial = features[~df_artificial.isna()]
+    return df_artificial
+
+rnd_1b = get_random_1b(features, 0.1)
+rnd_1b.isna().sum()
+```
+
+# C (2)
+- a
+- b
+
+```{python}
+from sklearn.model_selection import train_test_split, GridSearchCV
+
+seed = 42
+features_train = features.values
+labels_train = labels.values.ravel()
+X_train, X_test, y_train, y_test = train_test_split(features_train, labels_train, test_size=0.20,  random_state=seed)
+print(X_train.shape, X_test.shape, y_train.shape, y_test.shape)
+```
+
+```{python}
+from sklearn.feature_selection import mutual_info_classif
+
+feature_mutual_informaion = mutual_info_classif(X_train, y_train)
+
+information_gain = pd.DataFrame([features.columns, feature_mutual_informaion]).T
+information_gain.columns = ['feature','information_gain']
+information_gain.sort_values(by='information_gain', ascending=False, inplace=True)
+display(information_gain.head(), information_gain.tail())
+```
+
+```{python}
+'''2a add nan value to only one feature'''
+def get_random_2a(data, selected_col, p):
+    c = int(data.shape[0]*p)
+    n_rows = data.shape[0]
+    m_cols = 1
+
+    col = np.ones((n_rows, m_cols))
+
+    mask = np.zeros(n_rows * m_cols, dtype=bool)
+    mask[:c] = True
+
+    np.random.shuffle(mask)
+
+    mask = mask.reshape(col.shape[0], col.shape[1])
+    col[mask] = np.nan
+
+    df_artificial = pd.DataFrame(col, columns=selected_col)
+    df_artificial = data[selected_col][~df_artificial.isna()]
+    data[selected_col] = df_artificial
+    return data
+
+
+high_ig = ['Elevation'] 
+features_copy = features.copy()
+rnd_2a_hi_hi = get_random_2a(features_copy, high_ig, p=0.8)
+features_copy = features.copy()
+rnd_2a_hi_lo = get_random_2a(features_copy, high_ig, p=0.2)
+
+low_ig = ['Soil_Type26']
+features_copy = features.copy()
+rnd_2a_lo_hi = get_random_2a(features_copy, low_ig, p=0.8)
+features_copy = features.copy()
+rnd_2a_lo_lo = get_random_2a(features_copy, low_ig, p=0.2)
+
+display(rnd_2a_hi_hi.isna().sum().head(4) , rnd_2a_hi_lo.isna().sum().head(4))
+display(rnd_2a_lo_hi.isna().sum().tail(15), rnd_2a_lo_lo.isna().sum().tail(15))
+```
+
+```{python}
+'''2b add small/lagre fraction nan values to only ALL features'''
+small = 0.2
+large = 0.8
+
+
+features_copy = features.copy()
+rnd_2b_small = get_random_1b(features_copy, small)
+
+features_copy = features.copy()
+rnd_2b_large = get_random_1b(features_copy, large)
+```
+
+```{python}
+display(rnd_2b_small.isna().sum().head(), rnd_2b_large.isna().sum().head())
+```
+
+# C (3)
+Implement different strategies to deal with these missing values and describe their implementation, by
+- a. ignoring the respective attributes completely in the dataset
+- b. replacing the missing attribute values by the mean/median value of that attribute in the entire dataset
+- c. replacing the missing attribute by the mean / median value of that attribute in the respective class
+
+```{python}
+''' 
+> one attribute (2a)
+rnd_2a_hi_lo
+rnd_2a_hi_hi
+rnd_2a_lo_lo
+rnd_2a_lo_hi
+
+> all attributes (2b)
+rnd_2b_small
+rnd_2b_large
+'''
+
+all_datasets_names = ['rnd_2a_hi_lo',
+                        'rnd_2a_hi_hi',
+                        'rnd_2a_lo_lo',
+                        'rnd_2a_lo_hi',
+                        'rnd_2b_small',
+                        'rnd_2b_large']
+
+all_datasets = [rnd_2a_hi_lo.copy(), rnd_2a_hi_hi.copy(), rnd_2a_lo_lo.copy(), rnd_2a_lo_hi.copy(), rnd_2b_small.copy(), rnd_2b_large.copy()] 
+```
+
+## 3a
+
+```{python}
+def ignore_attribute(df):
+    df = df.dropna(axis=1)
+    return df
+    
+print('(a.)')
+print('shape after ignoring attribute(s) containing nan values..')
+for num, i in enumerate(all_datasets, 0):
+    print('dataset:',all_datasets_names[num], ignore_attribute(i).shape)
+```
+
+## 3b
+
+```{python}
+def fill_custom(df, fill_with='mean'):
+    '''
+    3b
+    fill each nan with the mean/median of the whole dataset
+    - note we only differentiate between categorical and numerical feartures for mean max calculation
+    '''
+    if fill_with == 'median':
+        median_categorical = df[features_categorical].stack().median()
+        median_numerical = df[features_numerical].stack().median()
+
+        print(' >median_cat.', round(median_categorical,4), 'median_num.', round(median_numerical,4))
+        df[features_categorical] = df[features_categorical].fillna(median_categorical)
+        df[features_numerical] = df[features_numerical].fillna(median_numerical)
+    elif fill_with == 'mean':
+        mean_categorical = df[features_categorical].stack().mean()
+        mean_numerical = df[features_numerical].stack().mean()
+
+        print(' >mean_cat.', round(mean_categorical,4), 'mean_num.', round(mean_numerical,4))
+        df[features_categorical] = df[features_categorical].fillna(mean_categorical)
+        df[features_numerical] = df[features_numerical].fillna(mean_numerical)
+    
+    return df
+
+
+print('(b.)')
+print('shape after replacing attribute(s) with mean/median of the entire dataset..\n')
+for num, i in enumerate(all_datasets, 0):
+    tmp_mean = fill_custom(i.copy(), 'mean')
+    tmp_median = fill_custom(i.copy(), 'median')
+    print('dataset:',all_datasets_names[num], 'shape', tmp_mean.shape, 'nan-count', tmp_mean.isna().sum().sum())
+    print('dataset:',all_datasets_names[num], 'shape', tmp_median.shape, 'nan-count', tmp_median.isna().sum().sum())
+    print('\n')
+```
+
+## 3c
+
+```{python}
+'''replace with respective column mean/median'''
+
+def fill_attribute(df, fill_with='mean'):
+    if fill_with == 'mean':
+        df = df.fillna(df.mean())
+    elif fill_with == 'median':
+        df = df.fillna(df.median())
+    return df
+        
+        
+print('(c.)')
+print('shape after replacing attribute(s) with the feature respective mena/median containing nan values..')
+for num, i in enumerate(all_datasets, 0):
+    tmp_mean = fill_attribute(i, 'mean')
+    tmp_median = fill_attribute(i, 'median')
+    print('dataset:',all_datasets_names[num], 'shape', tmp_mean.shape, 'nan-count', tmp_mean.isna().sum().sum())
+    print('dataset:',all_datasets_names[num], 'shape', tmp_median.shape, 'nan-count', tmp_median.isna().sum().sum())
+    print('\n')
+```
